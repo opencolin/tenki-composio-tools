@@ -10,7 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        # pnpm 11.20+ requires Node >= 22.13 (node:sqlite), so older Node
+        # cannot even run the install step. The published package still
+        # targets Node >= 18 (see engines + tsup target).
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
 
