@@ -1,6 +1,6 @@
 {
   "name": "@tenkicloud/composio-tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tenki sandbox tools for Composio agents — boot disposable Linux microVMs, run commands, snapshot, and terminate them through Composio custom toolkits.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -16,6 +16,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -53,14 +54,14 @@
     "@composio/core": ">=0.13.0 <1"
   },
   "dependencies": {
-    "@tenkicloud/sandbox": "^0.4.0",
+    "@tenkicloud/sandbox": "^0.5.4",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.111.0",
     "@composio/core": "^0.13.0",
     "@types/node": "^22.0.0",
     "dotenv": "^16.4.0",
+    "openai": "^7.4.0",
     "prettier": "^3.3.0",
     "tsx": "^4.19.0",
     "tsup": "^8.0.0",

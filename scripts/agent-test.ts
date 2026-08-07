@@ -1,30 +1,36 @@
 /**
- * Agent test for @tenkicloud/composio-tools (Phase B step 3).
+ * Agent test for @tenkicloud/composio-tools.
  *
- * A minimal agentic loop: Claude (Anthropic Messages API) is instructed to boot
- * a Tenki sandbox, inspect it with a shell command, and clean up — using ONLY
- * the LOCAL_TENKI_* tools bound to a real Composio session.
+ * A minimal agentic loop against any OpenAI-compatible chat-completions API:
+ * the model is instructed to boot a Tenki sandbox, inspect it with a shell
+ * command, and clean up — using ONLY the LOCAL_TENKI_* tools bound to a real
+ * Composio session. Works with OpenAI, gateways (OpenRouter/Groq/self-hosted),
+ * and Anthropic via its OpenAI-compatible endpoint.
  *
- * Architecture note: custom tools are SESSION-scoped, so tool_use blocks are
- * executed via session.execute() — not provider.handleToolCalls(), which goes
- * through Composio's global execute path and cannot see session-bound custom
- * tools. Tool definitions come from session.customTools() for the same reason.
+ * Architecture note: custom tools are SESSION-scoped, so tool calls are
+ * executed via session.execute() — not provider handleToolCalls helpers, which
+ * go through Composio's global execute path and cannot see session-bound
+ * custom tools. Tool definitions come from session.customTools().
  *
  * Requires in .env (or exported):
- *   COMPOSIO_API_KEY   (https://app.composio.dev)
- *   TENKI_API_KEY      (https://app.tenki.cloud)
- *   ANTHROPIC_API_KEY  (https://console.anthropic.com/settings/keys)
+ *   COMPOSIO_API_KEY  (https://app.composio.dev)
+ *   TENKI_API_KEY     (https://app.tenki.cloud)
+ *   LLM_API_KEY       (falls back to OPENAI_API_KEY, then ANTHROPIC_API_KEY)
+ *   LLM_MODEL         e.g. gpt-5, anthropic/opus-5 — whatever your endpoint serves
  * Optional:
- *   ANTHROPIC_MODEL    (default: claude-sonnet-5)
+ *   LLM_BASE_URL      default https://api.openai.com/v1
  *
  * Usage: pnpm agent
  */
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import type {
+  ChatCompletionFunctionTool,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 import { Composio } from '@composio/core';
 import 'dotenv/config';
 import { tenkiToolkit } from '../src/index';
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5';
 const MAX_TURNS = 10;
 
 const TASK = [
@@ -38,29 +44,46 @@ const line = (title: string) =>
   console.log(`\n━━━ ${title} ${'━'.repeat(Math.max(0, 60 - title.length))}`);
 
 async function main(): Promise<void> {
-  for (const name of ['COMPOSIO_API_KEY', 'TENKI_API_KEY', 'ANTHROPIC_API_KEY']) {
-    if (!process.env[name]) {
+  const llmApiKey =
+    process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  const model = process.env.LLM_MODEL;
+  for (const [name, value] of [
+    ['COMPOSIO_API_KEY', process.env.COMPOSIO_API_KEY],
+    ['TENKI_API_KEY', process.env.TENKI_API_KEY],
+    ['LLM_API_KEY (or OPENAI_API_KEY / ANTHROPIC_API_KEY)', llmApiKey],
+    ['LLM_MODEL', model],
+  ] as const) {
+    if (!value) {
       console.error(`❌ Missing ${name} — add it to .env`);
       process.exit(1);
     }
   }
 
   const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
-  const anthropic = new Anthropic();
+  const llm = new OpenAI({
+    apiKey: llmApiKey,
+    baseURL: process.env.LLM_BASE_URL ?? 'https://api.openai.com/v1',
+  });
 
   line('Session setup');
   const session = await composio.sessions.create('default', {
     experimental: { customToolkits: [tenkiToolkit()] },
   });
   console.log(`✅ Composio session: ${session.sessionId}`);
+  console.log(`✅ LLM: ${model} via ${process.env.LLM_BASE_URL ?? 'api.openai.com'}`);
 
-  // Build Claude tool definitions straight from the session's custom-tool registry.
-  const tools: Anthropic.Tool[] = session.customTools({ toolkit: 'TENKI' }).map(tool => ({
-    name: tool.slug,
-    description: tool.description,
-    input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
-  }));
-  console.log(`✅ Tools exposed to the agent: ${tools.map(t => t.name).join(', ')}`);
+  // Build tool definitions straight from the session's custom-tool registry.
+  const tools: ChatCompletionFunctionTool[] = session
+    .customTools({ toolkit: 'TENKI' })
+    .map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.slug,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      },
+    }));
+  console.log(`✅ Tools exposed: ${tools.map(t => t.function.name).join(', ')}`);
 
   // Verification trackers
   const liveSandboxes = new Set<string>();
@@ -69,67 +92,78 @@ async function main(): Promise<void> {
   let sawTerminate = false;
   let finalText = '';
 
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: TASK }];
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content:
+        'You are an infrastructure agent. Use only the provided tools to complete the task. ' +
+        'Always terminate any sandbox you created before giving your final answer.',
+    },
+    { role: 'user', content: TASK },
+  ];
 
   try {
     for (let turn = 1; turn <= MAX_TURNS; turn++) {
-      line(`Turn ${turn} → ${MODEL}`);
-      const response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 2048,
-        system:
-          'You are an infrastructure agent. Use only the provided tools to complete the task. ' +
-          'Always terminate any sandbox you created before giving your final answer.',
-        tools,
+      line(`Turn ${turn} → ${model}`);
+      const response = await llm.chat.completions.create({
+        model: model!,
         messages,
+        tools,
+        tool_choice: 'auto',
       });
 
-      for (const block of response.content) {
-        if (block.type === 'text' && block.text.trim()) {
-          console.log(`🤖 ${block.text.trim()}`);
-          finalText = block.text;
-        }
+      const message = response.choices[0]?.message;
+      if (!message) throw new Error('LLM returned no choices');
+
+      if (typeof message.content === 'string' && message.content.trim()) {
+        console.log(`🤖 ${message.content.trim()}`);
+        finalText = message.content;
       }
 
-      if (response.stop_reason !== 'tool_use') {
-        console.log(`(stop_reason=${response.stop_reason})`);
+      const toolCalls = message.tool_calls ?? [];
+      if (toolCalls.length === 0) {
+        console.log(`(finish_reason=${response.choices[0]?.finish_reason})`);
         break;
       }
 
-      messages.push({ role: 'assistant', content: response.content });
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      messages.push(message);
 
-      for (const block of response.content) {
-        if (block.type !== 'tool_use') continue;
-        const args = (block.input ?? {}) as Record<string, unknown>;
-        console.log(`🔧 ${block.name} ${JSON.stringify(args)}`);
+      for (const toolCall of toolCalls) {
+        if (toolCall.type !== 'function') continue;
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(toolCall.function.arguments || '{}');
+        } catch {
+          console.error(`⚠️  Unparseable arguments for ${toolCall.function.name}`);
+        }
+        console.log(`🔧 ${toolCall.function.name} ${JSON.stringify(args)}`);
 
-        const result = await session.execute(block.name, args);
+        const result = await session.execute(toolCall.function.name, args);
         const data = result.data ?? {};
         console.log(`   → ${JSON.stringify(data).slice(0, 400)}`);
 
         // Track lifecycle for verification + cleanup safety net
-        if (block.name === 'LOCAL_TENKI_CREATE_SANDBOX' && data.success === true) {
+        if (toolCall.function.name === 'LOCAL_TENKI_CREATE_SANDBOX' && data.success === true) {
           sawCreate = true;
           if (typeof data.sessionId === 'string') liveSandboxes.add(data.sessionId);
         }
-        if (block.name === 'LOCAL_TENKI_EXEC_COMMAND' && data.exitCode === 0) {
+        if (toolCall.function.name === 'LOCAL_TENKI_EXEC_COMMAND' && data.exitCode === 0) {
           sawSuccessfulExec = true;
         }
-        if (block.name === 'LOCAL_TENKI_TERMINATE_SANDBOX' && data.terminated === true) {
+        if (
+          toolCall.function.name === 'LOCAL_TENKI_TERMINATE_SANDBOX' &&
+          data.terminated === true
+        ) {
           sawTerminate = true;
           if (typeof args.sessionId === 'string') liveSandboxes.delete(args.sessionId);
         }
 
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
           content: JSON.stringify(data),
-          ...(result.error !== null ? { is_error: true } : {}),
         });
       }
-
-      messages.push({ role: 'user', content: toolResults });
     }
   } finally {
     // Safety net: never leave a paid microVM running, whatever the agent did.

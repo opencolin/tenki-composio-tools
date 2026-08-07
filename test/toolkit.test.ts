@@ -4,7 +4,6 @@ import {
   TenkiSandbox,
   SessionNotFoundError,
   type ExecResult,
-  type Identity,
   type Session,
   type Snapshot,
 } from '@tenkicloud/sandbox';
@@ -18,18 +17,6 @@ vi.mock('@tenkicloud/sandbox', async importOriginal => {
 });
 
 const encoder = new TextEncoder();
-
-const identity: Identity = {
-  ownerType: 'WORKSPACE',
-  ownerId: 'ws-1',
-  workspaces: [
-    {
-      id: 'ws-1',
-      name: 'My Workspace',
-      projects: [{ id: 'proj-1', name: 'My Project' }],
-    },
-  ],
-};
 
 function fakeExecResult(overrides: Partial<ExecResult> = {}): ExecResult {
   return {
@@ -54,7 +41,7 @@ function fakeSession(overrides: Partial<Session> = {}): Session {
     cpuCores: 2,
     memoryMb: 4096,
     diskSizeGb: 10,
-    projectId: 'proj-1',
+    workspaceId: 'ws-1',
     outboundEnabled: false,
     timeoutAt: new Date('2026-07-14T12:00:00Z'),
     idleTimeoutMinutes: 30,
@@ -72,7 +59,6 @@ function fakeSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     id: 'snap-1',
     sessionId: 'sess-1',
     workspaceId: 'ws-1',
-    projectId: 'proj-1',
     name: 'checkpoint',
     state: 'READY',
     sizeBytes: 123_456,
@@ -83,7 +69,6 @@ function fakeSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
 }
 
 interface MockClient {
-  whoAmI: ReturnType<typeof vi.fn>;
   create: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
   list: ReturnType<typeof vi.fn>;
@@ -92,7 +77,6 @@ interface MockClient {
 
 function mockClient(overrides: Partial<MockClient> = {}): MockClient {
   const client: MockClient = {
-    whoAmI: vi.fn().mockResolvedValue(identity),
     create: vi.fn().mockResolvedValue(fakeSession()),
     get: vi.fn().mockResolvedValue(fakeSession()),
     list: vi.fn().mockResolvedValue([fakeSession()]),
@@ -121,8 +105,6 @@ async function execute(
 
 beforeEach(() => {
   vi.mocked(TenkiSandbox).mockReset();
-  delete process.env.TENKI_WORKSPACE_ID;
-  delete process.env.TENKI_PROJECT_ID;
 });
 
 describe('tenkiToolkit shape', () => {
@@ -152,7 +134,7 @@ describe('tenkiToolkit shape', () => {
 });
 
 describe('CREATE_SANDBOX', () => {
-  it('resolves workspace/project via whoAmI and creates the session', async () => {
+  it('creates the session without any workspace/project resolution (key infers scope)', async () => {
     const client = mockClient();
     const toolkit = tenkiToolkit();
 
@@ -161,43 +143,13 @@ describe('CREATE_SANDBOX', () => {
     expect(result.success).toBe(true);
     expect(result.sessionId).toBe('sess-1');
     expect(result.state).toBe('RUNNING');
+    expect(result.workspaceId).toBe('ws-1');
+    expect(client.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'box' }));
     expect(client.create).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 'ws-1', projectId: 'proj-1', name: 'box' })
+      expect.not.objectContaining({ workspaceId: expect.anything() })
     );
-  });
-
-  it('caches the whoAmI resolution across calls', async () => {
-    const client = mockClient();
-    const toolkit = tenkiToolkit();
-
-    await execute(toolkit, 'CREATE_SANDBOX', {});
-    await execute(toolkit, 'CREATE_SANDBOX', {});
-
-    expect(client.whoAmI).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips whoAmI when workspaceId and projectId are both provided', async () => {
-    const client = mockClient();
-    const toolkit = tenkiToolkit({ workspaceId: 'ws-x', projectId: 'proj-x' });
-
-    await execute(toolkit, 'CREATE_SANDBOX', {});
-
-    expect(client.whoAmI).not.toHaveBeenCalled();
     expect(client.create).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 'ws-x', projectId: 'proj-x' })
-    );
-  });
-
-  it('honors TENKI_WORKSPACE_ID / TENKI_PROJECT_ID env overrides', async () => {
-    const client = mockClient();
-    process.env.TENKI_WORKSPACE_ID = 'ws-env';
-    process.env.TENKI_PROJECT_ID = 'proj-env';
-
-    await execute(tenkiToolkit(), 'CREATE_SANDBOX', {});
-
-    expect(client.whoAmI).not.toHaveBeenCalled();
-    expect(client.create).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 'ws-env', projectId: 'proj-env' })
+      expect.not.objectContaining({ projectId: expect.anything() })
     );
   });
 
@@ -225,18 +177,6 @@ describe('CREATE_SANDBOX', () => {
     expect(client.create).toHaveBeenCalledWith(
       expect.objectContaining({ cpuCores: 8, allowOutbound: true })
     );
-  });
-
-  it('returns a structured error when no workspace/project is visible', async () => {
-    mockClient({
-      whoAmI: vi.fn().mockResolvedValue({ ownerType: 'USER', ownerId: 'u1', workspaces: [] }),
-    });
-
-    const result = await execute(tenkiToolkit(), 'CREATE_SANDBOX', {});
-
-    expect(result.success).toBe(false);
-    expect(result.error).toMatchObject({ type: 'Error' });
-    expect((result.error as { message: string }).message).toContain('TENKI_WORKSPACE_ID');
   });
 
   it('boots without blocking readiness and applies the max-duration backstop by default', async () => {
@@ -422,7 +362,7 @@ describe('GET_SANDBOX', () => {
       state: 'RUNNING',
       cpuCores: 2,
       memoryMb: 4096,
-      projectId: 'proj-1',
+      workspaceId: 'ws-1',
       outboundNetworking: false,
       expiresAt: '2026-07-14T12:00:00.000Z',
     });

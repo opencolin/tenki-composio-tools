@@ -35,15 +35,13 @@ const session = await composio.create('user_1', {
 
 > Note: toolkits bind via `experimental.customToolkits` (standalone tools use `experimental.customTools`).
 
-Authentication: set `TENKI_API_KEY` in your environment (get one at [app.tenki.cloud](https://app.tenki.cloud)), or pass `authToken` explicitly. The workspace/project for new sandboxes is resolved automatically from the key's identity; override with `TENKI_WORKSPACE_ID` / `TENKI_PROJECT_ID` env vars or factory options.
+Authentication: set `TENKI_API_KEY` in your environment (get one at [app.tenki.cloud](https://app.tenki.cloud)), or pass `authToken` explicitly. Workspace API keys infer the workspace automatically — no workspace or project configuration is needed.
 
 ## Configuration
 
 ```ts
 tenkiToolkit({
   authToken: 'tk_…',            // default: TENKI_API_KEY env var
-  workspaceId: '…',             // default: TENKI_WORKSPACE_ID env var, else first visible workspace
-  projectId: '…',               // default: TENKI_PROJECT_ID env var, else first project in workspace
   preload: true,                // expose tools in session.tools() without searching first
   bootTimeoutMs: 120_000,       // creation + readiness budget; failed boots are terminated, not leaked
   defaults: {                   // applied to CREATE_SANDBOX when the agent omits them
@@ -94,7 +92,8 @@ Live verification (needs a `.env` with real keys — see the script headers):
 
 ```bash
 pnpm smoke   # drives all six tools through a real Composio session: create → exec → snapshot → terminate
-pnpm agent   # Claude autonomously boots, inspects, and terminates a sandbox (needs ANTHROPIC_API_KEY)
+pnpm agent   # an LLM autonomously boots, inspects, and terminates a sandbox
+             # (any OpenAI-compatible endpoint: set LLM_API_KEY + LLM_MODEL, optional LLM_BASE_URL)
 ```
 
 Both scripts terminate every microVM they create (even on failure) and `smoke` deletes its test snapshot.

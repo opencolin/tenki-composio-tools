@@ -36,14 +36,10 @@ import { z } from 'zod/v3';
 
 /** Options for {@link tenkiToolkit}. All optional; env vars fill the gaps. */
 export interface TenkiToolkitOptions {
-  /** Tenki API key. Defaults to the TENKI_API_KEY environment variable. */
+  /** Tenki API key. Defaults to the TENKI_API_KEY environment variable. Workspace API keys infer the workspace automatically. */
   authToken?: string;
   /** Override the Tenki API base URL (rarely needed). */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Defaults to TENKI_WORKSPACE_ID, else the first workspace visible to the key. */
-  workspaceId?: string;
-  /** Project to create sandboxes in. Defaults to TENKI_PROJECT_ID, else the first project in the resolved workspace. */
-  projectId?: string;
   /** When true, expose the tools in session.tools() without the agent having to search first. */
   preload?: boolean;
   /** Budget for sandbox creation + readiness in CREATE_SANDBOX. A boot that exceeds it is terminated, not leaked. Default 120s. */
@@ -142,7 +138,7 @@ function sessionSummary(session: Session): ToolResult {
 function sessionDetail(session: Session): ToolResult {
   return {
     ...sessionSummary(session),
-    projectId: session.projectId,
+    workspaceId: session.workspaceId,
     outboundNetworking: session.outboundEnabled,
     expiresAt: toIso(session.timeoutAt),
     idleTimeoutMinutes: session.idleTimeoutMinutes,
@@ -171,7 +167,6 @@ function snapshotSummary(snapshot: Snapshot): ToolResult {
  */
 export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
   let client: TenkiSandbox | undefined;
-  let target: { workspaceId: string; projectId: string } | undefined;
 
   const getClient = (): TenkiSandbox => {
     client ??= new TenkiSandbox({
@@ -179,39 +174,6 @@ export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
       ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
     });
     return client;
-  };
-
-  /**
-   * Resolve the workspace/project pair required by session creation.
-   * Explicit options win, then TENKI_WORKSPACE_ID / TENKI_PROJECT_ID env vars,
-   * then the first workspace/project visible to the API key (via whoAmI).
-   * Cached after the first resolution.
-   */
-  const resolveTarget = async (): Promise<{ workspaceId: string; projectId: string }> => {
-    if (target) return target;
-
-    const workspaceOverride = options.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
-    const projectOverride = options.projectId ?? process.env.TENKI_PROJECT_ID;
-
-    if (workspaceOverride && projectOverride) {
-      target = { workspaceId: workspaceOverride, projectId: projectOverride };
-      return target;
-    }
-
-    const identity = await getClient().whoAmI();
-    const workspace =
-      identity.workspaces.find(ws => ws.id === workspaceOverride) ?? identity.workspaces[0];
-    const project =
-      workspace?.projects.find(p => p.id === projectOverride) ?? workspace?.projects[0];
-    if (!workspace || !project) {
-      throw new Error(
-        'No Tenki workspace/project is visible for this API key. ' +
-          'Set TENKI_WORKSPACE_ID and TENKI_PROJECT_ID, or pass workspaceId/projectId to tenkiToolkit().'
-      );
-    }
-
-    target = { workspaceId: workspace.id, projectId: project.id };
-    return target;
   };
 
   const createSandbox = experimental_createTool('CREATE_SANDBOX', {
@@ -267,15 +229,13 @@ export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
     }),
     execute: async input =>
       run(async () => {
-        const { workspaceId, projectId } = await resolveTarget();
         const startedAt = Date.now();
         // Failure-atomic boot: take the session handle *before* waiting for
         // readiness, so a failed or timed-out boot is terminated instead of
         // leaking a running microVM. maxDurationMs is the backstop for the
         // host-crash/SIGKILL case, where no cleanup code runs at all.
+        // The workspace is inferred from the API key (SDK >= 0.5).
         const session = await getClient().create({
-          workspaceId,
-          projectId,
           maxDurationMs: DEFAULT_MAX_DURATION_MS,
           ...(options.defaults ?? {}),
           ...(input.name !== undefined ? { name: input.name } : {}),
