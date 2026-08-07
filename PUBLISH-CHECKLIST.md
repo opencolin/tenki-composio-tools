@@ -5,7 +5,7 @@ Status: code complete and live-validated (unit tests 24/24, `pnpm smoke` 11/11 s
 ## 1. Decisions (need sign-off from the Tenki team)
 
 - [ ] **Package name.** `@tenkicloud/composio-tools` (matches the `@tenkicloud/sandbox` scope; recommended). Alternatives considered: `@tenkicloud/composio` (too broad), `composio-tenki` (unscoped, follows `langchain-tenki` precedent but loses the org scope).
-- [x] **GitHub org.** Decided: `TenkiCloud` (github.com/TenkiCloud — Tenki's official org). Repo transfers from `AlexanderArmua/composio-tools`.
+- [x] **GitHub org.** Final home: `LuxorLabs/tenki-composio-tools` (github.com/LuxorLabs/tenki-composio-tools). History: created at `AlexanderArmua/composio-tools`, briefly `TenkiCloud/composio-tools`, then moved under the LuxorLabs org.
 - [ ] **License holder line.** `LICENSE` currently says "Luxor Technology Corporation (Tenki Cloud)" — confirm or correct the legal entity.
 
 ## 2. Repo setup
@@ -13,7 +13,7 @@ Status: code complete and live-validated (unit tests 24/24, `pnpm smoke` 11/11 s
 - [ ] `git init` + initial commit (proposed messages below), push to the chosen org.
 - [ ] Fill `repository`, `homepage`, and `bugs` fields in `package.json` once the repo URL exists.
 - [ ] Enable branch protection on `main` (require CI green + 1 review).
-- [ ] CI is already included at `.github/workflows/ci.yml` (format check, typecheck, unit tests, build on Node 18/20/22). It needs no secrets — unit tests are fully mocked.
+- [x] CI is included at `.github/workflows/ci.yml`: format check, typecheck, unit tests, and build on Node 22/24 (pnpm 11 requires Node >= 22.13), plus an `engine-floor` job that runs the built `dist/` on Node 18/20 to guard the `engines: >=18` claim. It needs no secrets — unit tests are fully mocked.
 
 ## 3. npm
 
