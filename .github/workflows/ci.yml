@@ -10,7 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        # pnpm 11.20+ requires Node >= 22.13 (node:sqlite), so older Node
+        # cannot even run the install step. The published package still
+        # targets Node >= 18 (see engines + tsup target).
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
 
@@ -37,3 +40,53 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # The package declares engines.node >= 18 (and tsup targets node18), but the
+  # pnpm toolchain needs Node >= 22.13, so the test matrix can't run there.
+  # Instead: build with a modern toolchain, then execute the built artifacts on
+  # the engine floor to catch runtime regressions for Node 18/20 consumers.
+  engine-floor:
+    name: dist runtime smoke (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node 24 (build toolchain)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Switch to Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run built package on the engine floor
+        # The package is ESM-only (like its @composio/core peer), so the floor
+        # check exercises the ESM entry — the only one that exists.
+        run: |
+          node --version
+          node --input-type=module -e "
+            const { tenkiToolkit } = await import('./dist/index.js');
+            const tk = tenkiToolkit({ preload: true });
+            if (tk.slug !== 'TENKI' || tk.tools.length !== 6) throw new Error('bad toolkit shape');
+            for (const tool of tk.tools) {
+              const props = tool.inputSchema && tool.inputSchema.properties;
+              if (!props || Object.keys(props).length === 0) throw new Error('empty schema: ' + tool.slug);
+            }
+            console.log('esm ok:', tk.tools.map(t => t.slug).join(', '));
+          "

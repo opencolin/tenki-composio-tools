@@ -3,14 +3,12 @@
   "version": "0.2.0",
   "description": "Tenki sandbox tools for Composio agents — boot disposable Linux microVMs, run commands, snapshot, and terminate them through Composio custom toolkits.",
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -41,11 +39,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TenkiCloud/composio-tools.git"
+    "url": "git+https://github.com/LuxorLabs/tenki-composio-tools.git"
   },
-  "homepage": "https://github.com/TenkiCloud/composio-tools#readme",
+  "homepage": "https://github.com/LuxorLabs/tenki-composio-tools#readme",
   "bugs": {
-    "url": "https://github.com/TenkiCloud/composio-tools/issues"
+    "url": "https://github.com/LuxorLabs/tenki-composio-tools/issues"
   },
   "engines": {
     "node": ">=18"
