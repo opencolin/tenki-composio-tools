@@ -76,21 +76,17 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Run built package on the engine floor
+        # The package is ESM-only (like its @composio/core peer), so the floor
+        # check exercises the ESM entry — the only one that exists.
         run: |
           node --version
-          node -e "
-            const { tenkiToolkit } = require('./dist/index.cjs');
+          node --input-type=module -e "
+            const { tenkiToolkit } = await import('./dist/index.js');
             const tk = tenkiToolkit({ preload: true });
             if (tk.slug !== 'TENKI' || tk.tools.length !== 6) throw new Error('bad toolkit shape');
             for (const tool of tk.tools) {
               const props = tool.inputSchema && tool.inputSchema.properties;
               if (!props || Object.keys(props).length === 0) throw new Error('empty schema: ' + tool.slug);
             }
-            console.log('cjs ok:', tk.tools.map(t => t.slug).join(', '));
-          "
-          node --input-type=module -e "
-            const { tenkiToolkit } = await import('./dist/index.js');
-            const tk = tenkiToolkit();
-            if (tk.slug !== 'TENKI' || tk.tools.length !== 6) throw new Error('bad toolkit shape');
-            console.log('esm ok');
+            console.log('esm ok:', tk.tools.map(t => t.slug).join(', '));
           "

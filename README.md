@@ -10,7 +10,7 @@ The tools run **in-process in your app** and call the Tenki SDK directly. No ext
 npm install @tenkicloud/composio-tools @composio/core
 ```
 
-`@composio/core` is a peer dependency (>= 0.13.0). Requires Node >= 18.
+`@composio/core` is a peer dependency (>= 0.13.0). Requires Node >= 18. ESM-only, matching `@composio/core` — from CommonJS use dynamic `import()`, or plain `require()` on Node >= 20.19.
 
 ## Quickstart
 

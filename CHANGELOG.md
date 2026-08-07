@@ -4,6 +4,7 @@
 
 ### Breaking changes
 
+- **ESM-only.** The CJS build (`dist/index.cjs`) is removed. It could never work on Node 18/20 anyway: the `@composio/core` peer dependency ships no CJS build, so `require()` of this package threw `ERR_REQUIRE_ESM` there (caught by the new engine-floor CI job). ESM consumers are unaffected; CJS consumers on Node >= 20.19 / >= 22.12 can `require()` the ESM build natively, or use dynamic `import()`.
 - `tenkiToolkit()` no longer accepts `workspaceId` / `projectId` options, and the `TENKI_WORKSPACE_ID` / `TENKI_PROJECT_ID` environment variables are no longer read. Tenki removed the project-id requirement from sandbox session creation (server-side and SDK); Workspace API keys infer the workspace automatically. Remove these options if you passed them — no other migration is needed.
 - `GET_SANDBOX` / `CREATE_SANDBOX` responses now return `workspaceId` instead of `projectId` (field renamed upstream in the Tenki SDK).
 
