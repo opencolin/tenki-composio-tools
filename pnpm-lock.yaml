@@ -9,15 +9,15 @@ importers:
   .:
     dependencies:
       '@tenkicloud/sandbox':
-        specifier: ^0.5.4
-        version: 0.5.4
+        specifier: '>=1.4.1'
+        version: 1.4.1
       zod:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@composio/core':
         specifier: ^0.13.0
-        version: 0.13.1(ws@8.21.1)(zod@3.25.76)
+        version: 0.13.1(ws@8.21.3)(zod@3.25.76)
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
@@ -26,7 +26,7 @@ importers:
         version: 16.6.1
       openai:
         specifier: ^7.4.0
-        version: 7.4.0(ws@8.21.1)(zod@3.25.76)
+        version: 7.4.0(ws@8.21.3)(zod@3.25.76)
       prettier:
         specifier: ^3.3.0
         version: 3.9.5
@@ -674,8 +674,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@tenkicloud/sandbox@0.5.4':
-    resolution: {integrity: sha512-U/oV8TAB1rjpXHuo9DIrpxnd2tlO2MojNjzLjqKgx4+zkD4NjgpR6QzRv5awoXib0DND3bnu0qoQCIgsfcXTCw==}
+  '@tenkicloud/sandbox@1.4.1':
+    resolution: {integrity: sha512-0H7+EornkIlTc6GTMFMdkSKijvXOjqYkSWsZNeEcYh7vPjtnxFmrElTUXEBmPTeZXL2gmt+iPrhEcBthBopGHw==}
     engines: {node: '>=18'}
 
   '@types/estree@1.0.9':
@@ -1134,8 +1134,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  ws@8.21.1:
-    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1160,12 +1160,12 @@ snapshots:
 
   '@composio/client@0.1.0-alpha.74': {}
 
-  '@composio/core@0.13.1(ws@8.21.1)(zod@3.25.76)':
+  '@composio/core@0.13.1(ws@8.21.3)(zod@3.25.76)':
     dependencies:
       '@composio/client': 0.1.0-alpha.74
       '@composio/json-schema-to-zod': 0.2.0(zod@3.25.76)
       '@types/json-schema': 7.0.15
-      openai: 6.46.0(ws@8.21.1)(zod@3.25.76)
+      openai: 6.46.0(ws@8.21.3)(zod@3.25.76)
       picocolors: 1.1.1
       pusher-js: 8.5.0
       semver: 7.8.5
@@ -1504,12 +1504,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.2':
     optional: true
 
-  '@tenkicloud/sandbox@0.5.4':
+  '@tenkicloud/sandbox@1.4.1':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
       '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      ws: 8.21.1
+      ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -1741,14 +1741,14 @@ snapshots:
 
   object-assign@4.1.1: {}
 
-  openai@6.46.0(ws@8.21.1)(zod@3.25.76):
+  openai@6.46.0(ws@8.21.3)(zod@3.25.76):
     optionalDependencies:
-      ws: 8.21.1
+      ws: 8.21.3
       zod: 3.25.76
 
-  openai@7.4.0(ws@8.21.1)(zod@3.25.76):
+  openai@7.4.0(ws@8.21.3)(zod@3.25.76):
     optionalDependencies:
-      ws: 8.21.1
+      ws: 8.21.3
       zod: 3.25.76
 
   pathe@1.1.2: {}
@@ -1981,7 +1981,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  ws@8.21.1: {}
+  ws@8.21.3: {}
 
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:

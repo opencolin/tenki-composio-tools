@@ -36,7 +36,7 @@ import { z } from 'zod/v3';
 
 /** Options for {@link tenkiToolkit}. All optional; env vars fill the gaps. */
 export interface TenkiToolkitOptions {
-  /** Tenki API key. Defaults to the TENKI_API_KEY environment variable. Workspace API keys infer the workspace automatically. */
+  /** Tenki API key or service token (`tk_…`). Defaults to the TENKI_AUTH_TOKEN, then TENKI_API_KEY, environment variable. Workspace API keys infer the workspace automatically. */
   authToken?: string;
   /** Override the Tenki API base URL (rarely needed). */
   baseUrl?: string;
@@ -141,7 +141,6 @@ function sessionDetail(session: Session): ToolResult {
     workspaceId: session.workspaceId,
     outboundNetworking: session.outboundEnabled,
     expiresAt: toIso(session.timeoutAt),
-    idleTimeoutMinutes: session.idleTimeoutMinutes,
     tags: session.tags,
   };
 }
@@ -181,7 +180,7 @@ export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
     description:
       'Create a fresh, isolated Linux microVM (Tenki sandbox) and wait until it is ready to accept commands (~2-4s). ' +
       'Use this before EXEC_COMMAND when you need a safe environment to run code, install packages, or test commands. ' +
-      'Returns the sessionId required by all other TENKI tools. Outbound internet access is controlled by allowOutbound (workspace defaults apply when omitted) — check outboundNetworking in the response. ' +
+      'Returns the sessionId required by all other TENKI tools. Outbound internet access is on unless allowOutbound is false — check outboundNetworking in the response. ' +
       'Sandboxes self-terminate after maxDurationMinutes (default 30) as a safety backstop.',
     inputParams: z.object({
       name: z.string().max(100).optional().describe('Human-readable sandbox name.'),
@@ -197,7 +196,7 @@ export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
         .boolean()
         .optional()
         .describe(
-          'Enable outbound internet access from inside the sandbox (needed for apt/pip/npm installs or API calls). Default false.'
+          'Enable outbound internet access from inside the sandbox (needed for apt/pip/npm installs or API calls). Default true; pass false to isolate the sandbox from the network.'
         ),
       image: z.string().optional().describe('Image to boot. Omit for the default Ubuntu image.'),
       snapshotId: z
@@ -268,7 +267,8 @@ export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
     description:
       'Run a shell command inside an existing Tenki sandbox (executed with `bash -lc`, so pipes, globs, and && work). ' +
       'Requires a sessionId from CREATE_SANDBOX or LIST_SANDBOXES — this tool never creates sandboxes implicitly. ' +
-      `Returns exitCode, stdout, and stderr (output beyond ~${MAX_STDOUT_CHARS} characters is truncated).`,
+      `Returns exitCode, stdout, and stderr (output beyond ~${MAX_STDOUT_CHARS} characters is truncated). ` +
+      'A command still running at timeoutSeconds is stopped and returns timedOut=true (status TIMED_OUT) with the output it produced so far.',
     inputParams: z.object({
       sessionId: z
         .string()
@@ -292,12 +292,15 @@ export function tenkiToolkit(options: TenkiToolkitOptions = {}): CustomToolkit {
       run(async () => {
         const session = await getClient().get(input.sessionId);
         const timeoutMs = (input.timeoutSeconds ?? DEFAULT_EXEC_TIMEOUT_SECONDS) * 1000;
+        // The guest enforces timeoutMs: an overrun resolves (it does not throw)
+        // with status TIMED_OUT and whatever output was captured before it.
         const result = await session.exec('bash', { args: ['-lc', input.command], timeoutMs });
         const stdout = truncate(stdoutText(result), MAX_STDOUT_CHARS);
         const stderr = truncate(stderrText(result), MAX_STDERR_CHARS);
         return {
           exitCode: result.exitCode,
           status: result.status,
+          timedOut: result.status === 'TIMED_OUT',
           durationMs: result.durationMs,
           stdout: stdout.text,
           stdoutTruncated: stdout.truncated,

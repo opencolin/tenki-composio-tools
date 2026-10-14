@@ -44,7 +44,6 @@ function fakeSession(overrides: Partial<Session> = {}): Session {
     workspaceId: 'ws-1',
     outboundEnabled: false,
     timeoutAt: new Date('2026-07-14T12:00:00Z'),
-    idleTimeoutMinutes: 30,
     tags: [],
     exec: vi.fn().mockResolvedValue(fakeExecResult()),
     close: vi.fn().mockResolvedValue(undefined),
@@ -245,6 +244,7 @@ describe('EXEC_COMMAND', () => {
       success: true,
       exitCode: 0,
       status: 'SUCCEEDED',
+      timedOut: false,
       stdout: 'hi',
       stdoutTruncated: false,
       stderr: '',
@@ -265,6 +265,39 @@ describe('EXEC_COMMAND', () => {
     expect(session.exec).toHaveBeenCalledWith('bash', {
       args: ['-lc', 'sleep 5'],
       timeoutMs: 120_000,
+    });
+  });
+
+  it('reports a guest-enforced timeout as timedOut with the partial output', async () => {
+    // Shape the 1.x SDK resolves with when the guest stops a command at timeoutMs.
+    const session = fakeSession({
+      exec: vi.fn().mockResolvedValue(
+        fakeExecResult({
+          status: 'TIMED_OUT',
+          exitCode: -1,
+          reason: 'timeout',
+          stdout: encoder.encode('started\n'),
+        })
+      ),
+    } as Partial<Session>);
+    mockClient({ get: vi.fn().mockResolvedValue(session) });
+
+    const result = await execute(tenkiToolkit(), 'EXEC_COMMAND', {
+      sessionId: 'sess-1',
+      command: 'echo started; sleep 60',
+      timeoutSeconds: 2,
+    });
+
+    expect(session.exec).toHaveBeenCalledWith('bash', {
+      args: ['-lc', 'echo started; sleep 60'],
+      timeoutMs: 2_000,
+    });
+    expect(result).toMatchObject({
+      success: true,
+      timedOut: true,
+      status: 'TIMED_OUT',
+      exitCode: -1,
+      stdout: 'started',
     });
   });
 
